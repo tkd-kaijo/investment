@@ -289,16 +289,23 @@ function draw(){
     }
 
     // --- constant lines: median & mean ---
-    function drawStatLine(xval, color, label){
-      if(!(xval >= xMin && xval <= xMax)) return;
-      const px = x2px(xval);
-      ctx.strokeStyle=color; ctx.lineWidth=1.8;
-      ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, canvas.height - padB); ctx.stroke();
-      ctx.fillStyle=color; ctx.font="12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"; ctx.textAlign="center";
-      ctx.fillText(label, px, padT + 12);
-    }
-    drawStatLine(last.stats.median, "#ef4444", `中央値 ${fmtPct(last.stats.median)}`);
-    drawStatLine(last.stats.mean,   "#10b981", `平均 ${fmtPct(last.stats.mean)}`);
+    function drawStatLine(xval, color, text, align){
+  if(!(xval >= xMin && xval <= xMax)) return;
+  const px = x2px(xval);
+  ctx.strokeStyle=color; ctx.lineWidth=1.8;
+  ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, canvas.height - padB); ctx.stroke();
+  // label
+  ctx.fillStyle=color;
+  ctx.font="12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+  ctx.textAlign=align;
+  ctx.fillText(text, px + (align==="left"?4:-4), padT + 12);
+}
+
+// 中央値 → 左側に数値
+drawStatLine(last.stats.median, "#ef4444", fmtPct(last.stats.median), "right");
+
+// 平均値 → 右側に数値
+drawStatLine(last.stats.mean, "#10b981", fmtPct(last.stats.mean), "left");
 
     // stats display (below)
     document.getElementById("medVal").textContent  = fmtPct(last.stats.median);
