@@ -1,0 +1,367 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>リターン分布ビジュアライザ（総投資額比・CAGR9.3%・リスク11.2% 初期値）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{--fg:#111;--muted:#666;--bg:#fff;--grid:#e6e6e6;--accent:#2563eb;--axis:#000}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,'Apple Color Emoji','Segoe UI Emoji';margin:0;background:#fff;color:var(--fg);line-height:1.5}
+  header{padding:16px 20px;border-bottom:1px solid #eee}
+  h1{font-size:18px;margin:0 0 6px}
+  .wrap{max-width:1000px;margin:0 auto;padding:16px 20px}
+  .controls{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:end}
+  .card{border:1px solid #eee;border-radius:12px;padding:14px;background:#fafafa}
+  .card h3{margin:0 0 8px;font-size:15px}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  input[type="number"]{width:100%;padding:10px;border-radius:10px;border:1px solid #ddd;font-size:16px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{appearance:none;border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  canvas{width:100%;height:420px;border-radius:12px;border:1px solid #eee;background:#fff;touch-action:none}
+  .note{font-size:13px;color:var(--muted)}
+  .pill{position:absolute;padding:4px 8px;border-radius:999px;background:#000;color:#fff;font-size:12px;pointer-events:none;transform:translate(-50%,-120%);white-space:nowrap}
+  .legend{font-size:13px;color:#444;margin-top:8px}
+  .stats{margin-top:12px;font-size:14px;color:#333;display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .stats b{font-variant-numeric:tabular-nums}
+  .error{color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:8px;border-radius:8px;margin-top:10px;display:none}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>リターン分布ビジュアライザ（総投資額比）</h1>
+  <div class="note">
+    初期値は、<b>オルカン:TLT(Hあり):ゴールド(Hあり)=5:3:2</b>。<br>
+    <b>幾何平均リターン（CAGR）= 9.3%</b>、<b>リスク = 11.2%</b> を初期設定。<br>
+    ※ 本ツールでは「対数リターン平均 μ」を内部で用います。CAGR 9.3% に対応する μ は <b>約 8.90%</b> なので、初期入力は μ=8.90%（下の「対数」モード）にしてあります。
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="card" style="grid-column:span 6">
+      <h3>リターン・リスク・年数</h3>
+      <div class="row">
+        <div style="flex:1 1 160px">
+          <label>対数リターン平均 μ（年率, %）</label>
+          <input id="expRet" type="number" value="8.9" step="0.1">
+        </div>
+        <div style="flex:1 1 160px">
+          <label>リスク σ（年率, %）※対数リターンの標準偏差</label>
+          <input id="risk" type="number" value="11.2" step="0.1" min="0">
+        </div>
+        <div style="flex:1 1 120px">
+          <label>年数 T</label>
+          <input id="years" type="number" value="5" step="1" min="1">
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label><input type="radio" name="rtype" value="simple"> 入力を「期待 <b>単純</b> リターン（算術）」として扱う</label>
+        <label><input type="radio" name="rtype" value="log" checked> 入力を「年次の <b>対数</b> リターン平均 μ」として扱う（推奨）</label>
+        <button id="plotBtn" class="btn primary">描画</button>
+      </div>
+      <div class="note" style="margin-top:4px">
+        ※ 「算術平均」を入れる場合は上のラジオで「単純」を選択してください。長期の複利を評価するには「対数（μ）」の方が自然です。
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:span 6">
+      <h3>投資フロー（総投資額 比リターン）</h3>
+      <div class="row">
+        <div style="flex:1 1 200px">
+          <label>初期資産額（A₀）</label>
+          <input id="initAmt" type="number" value="50000000" step="100000">
+        </div>
+        <div style="flex:1 1 200px">
+          <label>年間追加投資額（Aₐₙₙ）</label>
+          <input id="addAmt" type="number" value="4000000" step="100000">
+        </div>
+      </div>
+      <div class="note" style="margin-top:6px">
+        拠出は各年末と仮定。成長率 y に対し、年率の等比成長 g=y^{1/T} とみなし、最終評価額は
+        <code>FV(y) ≈ A₀·y + Aₐₙₙ·(y-1)/(g-1)</code>。<br>
+        横軸は <b>(FV − 総投資額) / 総投資額</b> を % 表示（総投資額 = A₀ + T·Aₐₙₙ）。
+      </div>
+    </div>
+  </div>
+
+  <div style="position:relative;margin-top:14px">
+    <canvas id="chart" width="1200" height="420"></canvas>
+    <div id="pill" class="pill" style="display:none">0%</div>
+  </div>
+  <div class="legend">横軸：総投資額比のリターン（固定範囲：<b>-200%</b> 〜 <b>500%</b>、<b>50%</b>刻み）。タップ／クリックで縦線と値（%・総資産額・<b>上位○○%</b>）が追従します。縦軸は密度（正規化）。</div>
+
+  <div id="stats" class="stats">
+    <div>中央値（50%）: <b id="medVal">—</b></div>
+    <div>平均: <b id="meanVal">—</b></div>
+  </div>
+
+  <div id="err" class="error"></div>
+</div>
+
+<script>
+// ---------- math utils ----------
+function invNormCDF(p){
+  const a=[-39.6968302866538,220.946098424521,-275.928510446969,138.357751867269,-30.6647980661472,2.50662827745924];
+  const b=[-54.4760987982241,161.585836858041,-155.698979859887,66.8013118877197,-13.2806815528857];
+  const c=[-0.00778489400243029,-0.322396458041136,-2.40075827716184,-2.54973253934373,4.37466414146497,2.93816398269878];
+  const d=[0.00778469570904146,0.32246712907004,2.445134137143,3.75440866190742];
+  const plow=0.02425, phigh=1-plow;
+  let q,r;
+  if(p<plow){
+    q=Math.sqrt(-2*Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/
+           ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+  if(phigh<p){
+    q=Math.sqrt(-2*Math.log(1-p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/
+             ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+  q=p-0.5; r=q*q;
+  return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q /
+         (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+function lognormalPDF_y(y,m,s){
+  if(y<=0) return 0;
+  const z=(Math.log(y)-m)/s;
+  return (1/(y*s*Math.sqrt(2*Math.PI)))*Math.exp(-0.5*z*z);
+}
+function FV_of_y(y,T,A0,Aann){
+  const g = Math.pow(y, 1/T);
+  if (!isFinite(g) || g<=0) return NaN;
+  if (Math.abs(g-1) < 1e-10){ return A0*y + Aann*T; }
+  const series = (y - 1)/(g - 1);
+  return A0*y + Aann*series;
+}
+function totalInvested(T,A0,Aann){ return A0 + Aann*T; }
+function fmtPct(x){ return (x*100).toFixed(2) + '%'; }
+function fmtJPY(n){
+  try { return new Intl.NumberFormat('ja-JP', {style:'currency', currency:'JPY', maximumFractionDigits:0}).format(n); }
+  catch(e){ return '¥' + Math.round(n).toLocaleString('ja-JP'); }
+}
+
+// ---------- state ----------
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+const pill = document.getElementById('pill');
+const errBox = document.getElementById('err');
+const padL=70,padB=45,padT=20,padR=20;
+const xMin = -2.0, xMax = 5.0; // -200% to +500%
+let last = null;
+
+// helpers
+function x2px(x){ return padL + (x - xMin)/(xMax - xMin) * (canvas.width - padL - padR); }
+function y2px(y,yMax){ return padT + (1 - y / yMax) * (canvas.height - padT - padB); }
+function px2x(pxCanvas){ return xMin + (pxCanvas - padL) * (xMax - xMin) / (canvas.width - padL - padR); }
+
+function computeCurve(){
+  const expRet = parseFloat(document.getElementById('expRet').value)/100;
+  const sigma  = parseFloat(document.getElementById('risk').value)/100;
+  const T      = parseInt(document.getElementById('years').value,10);
+  const rtype  = document.querySelector('input[name="rtype"]:checked').value;
+  const A0     = parseFloat(document.getElementById('initAmt').value);
+  const Aann   = parseFloat(document.getElementById('addAmt').value);
+
+  let mu;
+  if(rtype==='simple'){ mu = Math.log(1+expRet) - 0.5*sigma*sigma; }
+  else { mu = expRet; }
+  const m = T*mu, s = Math.sqrt(T)*sigma;
+  const Invest = totalInvested(T,A0,Aann);
+
+  // sample y grid and map to x
+  const N=2400;
+  const y  = new Float64Array(N);
+  const fy = new Float64Array(N);
+  const x  = new Float64Array(N);
+  for(let i=0;i<N;i++){
+    const z = -6 + 12*i/(N-1);
+    y[i]  = Math.exp(m + s*z);
+    fy[i] = lognormalPDF_y(y[i], m, s);
+    const FV = FV_of_y(y[i], T, A0, Aann);
+    x[i] = (FV - Invest)/Invest;
+  }
+  // dx/dy
+  const dxdy = new Float64Array(N);
+  for(let i=1;i<N-1;i++){
+    const dy = y[i+1] - y[i-1];
+    const dx = x[i+1] - x[i-1];
+    dxdy[i] = dx/dy;
+  }
+  dxdy[0]   = (x[1]-x[0])/(y[1]-y[0]);
+  dxdy[N-1] = (x[N-1]-x[N-2])/(y[N-1]-y[N-2]);
+
+  // CDF over y（台形積分）
+  const cdf = new Float64Array(N);
+  cdf[0] = 0;
+  for(let i=1;i<N;i++){
+    const w = y[i] - y[i-1];
+    const fbar = 0.5*(fy[i]+fy[i-1]);
+    cdf[i] = cdf[i-1] + fbar*w;
+  }
+  const Z = cdf[N-1];
+  for(let i=0;i<N;i++) cdf[i] /= Z;
+
+  // pdf over x へ変換
+  let pts = [];
+  for(let i=0;i<N;i++){
+    const d = dxdy[i];
+    if(!isFinite(d) || Math.abs(d)<1e-14) continue;
+    const fx = fy[i]/Math.abs(d);
+    if(isFinite(fx) && isFinite(x[i])) pts.push([x[i], fx]);
+  }
+  pts.sort((a,b)=>a[0]-b[0]);
+  pts = pts.filter(p=>p[0]>=xMin && p[0]<=xMax);
+
+  // stats
+  function y_of_q(p){ return Math.exp(m + s*invNormCDF(p)); }
+  function x_of_y(Y){ const FV=FV_of_y(Y,T,A0,Aann); return (FV-Invest)/Invest; }
+  const x_med = x_of_y( y_of_q(0.5) );
+
+  // mean via integration over y
+  let Ex = 0;
+  for(let i=1;i<N;i++){
+    const w = y[i]-y[i-1];
+    const fbar = 0.5*(fy[i]+fy[i-1]);
+    const xbar = 0.5*(x[i]+x[i-1]);
+    Ex += xbar * fbar * w;
+  }
+
+  return {pts, x, y, fy, cdf, params:{m,s,T,A0,Aann,Invest}, stats:{median:x_med, mean:Ex}};
+}
+
+function draw(){
+  try{
+    errBox.style.display="none"; errBox.textContent="";
+    last = computeCurve();
+    const pts = last.pts;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // y scale with gentle cap（99%分位）
+    let yMax = 1;
+    if(pts.length){
+      const fvals = pts.map(p=>p[1]).sort((a,b)=>a-b);
+      const p99 = fvals[Math.floor(0.99*(fvals.length-1))];
+      yMax = Math.max(1e-9, Math.min(fvals[fvals.length-1], p99*1.25));
+    }
+
+    // grid 50%
+    ctx.strokeStyle = "#e6e6e6"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let pct=-200; pct<=500; pct+=50){
+      const px = x2px(pct/100);
+      ctx.moveTo(px, padT); ctx.lineTo(px, canvas.height - padB);
+    }
+    ctx.stroke();
+
+    // axes
+    ctx.strokeStyle = "#999"; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT); ctx.lineTo(padL, canvas.height - padB);
+    ctx.moveTo(padL, canvas.height - padB); ctx.lineTo(canvas.width - padR, canvas.height - padB);
+    ctx.stroke();
+
+    // axis at 0%
+    const x0 = x2px(0);
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, canvas.height - padB); ctx.stroke();
+
+    // x ticks
+    ctx.fillStyle = "#444"; ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"; ctx.textAlign = "center";
+    for(let pct=-200; pct<=500; pct+=50){
+      const px = x2px(pct/100);
+      ctx.fillText(pct.toFixed(0)+"%", px, canvas.height - padB + 16);
+    }
+
+    // pdf curve
+    if(pts.length){
+      ctx.strokeStyle = "#2563eb"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      let first=true;
+      for(const [x,fx] of pts){
+        const px = x2px(x);
+        const py = y2px(fx, yMax);
+        if(first){ ctx.moveTo(px,py); first=false; } else { ctx.lineTo(px,py); }
+      }
+      ctx.stroke();
+    }
+
+    // --- constant lines: median & mean ---
+    function drawStatLine(xval, color, label){
+      if(!(xval >= xMin && xval <= xMax)) return;
+      const px = x2px(xval);
+      ctx.strokeStyle=color; ctx.lineWidth=1.8;
+      ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, canvas.height - padB); ctx.stroke();
+      ctx.fillStyle=color; ctx.font="12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"; ctx.textAlign="center";
+      ctx.fillText(label, px, padT + 12);
+    }
+    drawStatLine(last.stats.median, "#ef4444", `中央値 ${fmtPct(last.stats.median)}`);
+    drawStatLine(last.stats.mean,   "#10b981", `平均 ${fmtPct(last.stats.mean)}`);
+
+    // stats display (below)
+    document.getElementById("medVal").textContent  = fmtPct(last.stats.median);
+    document.getElementById("meanVal").textContent = fmtPct(last.stats.mean);
+
+    // redraw hover guide if visible
+    if(pill.style.display!=="none"){
+      const px = parseFloat(pill.dataset.pxCanvas||x2px(0));
+      ctx.strokeStyle="#111"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, canvas.height - padB); ctx.stroke();
+    }
+  }catch(e){
+    errBox.style.display="block";
+    errBox.textContent = "エラー: " + (e && e.message ? e.message : e);
+    console.error(e);
+  }
+}
+
+// interaction with scaling + percentile display
+function showGuide(clientX){
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  let pxCanvas = (clientX - rect.left) * scaleX;
+  pxCanvas = Math.max(padL, Math.min(canvas.width - padR, pxCanvas));
+  const x = px2x(pxCanvas);
+
+  if(!last) return;
+  const {x:xs, y:ys, cdf, params:{T,A0,Aann}} = last;
+
+  // nearest index
+  let lo=0, hi=xs.length-1;
+  while(hi - lo > 1){
+    const mid = (lo + hi) >> 1;
+    if(xs[mid] < x) lo = mid; else hi = mid;
+  }
+  const i = Math.abs(xs[lo]-x) < Math.abs(xs[hi]-x) ? lo : hi;
+  const Y = ys[i];
+  const FV = FV_of_y(Y, T, A0, Aann);
+
+  // percentile
+  const lower = cdf[i];
+  const upper = 1 - lower;
+  const text = `${(x*100).toFixed(2)}% / 総資産 ${fmtJPY(FV)} / 上位 ${(upper*100).toFixed(1)}%`;
+
+  // place
+  const pxPage = rect.left + (pxCanvas / canvas.width) * rect.width;
+  pill.style.display = "block";
+  pill.textContent = text;
+  pill.dataset.pxCanvas = pxCanvas.toString();
+  pill.style.left = pxPage + "px";
+  pill.style.top  = (rect.top + padT + 12) + "px";
+
+  draw();
+}
+
+canvas.addEventListener('mousemove', e=> showGuide(e.clientX));
+canvas.addEventListener('mousedown', e=> showGuide(e.clientX));
+canvas.addEventListener('mouseleave', ()=>{ pill.style.display="none"; draw(); });
+canvas.addEventListener('touchstart', e=>{ if(e.touches.length){ showGuide(e.touches[0].clientX); e.preventDefault(); } }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ if(e.touches.length){ showGuide(e.touches[0].clientX); e.preventDefault(); } }, {passive:false});
+
+document.getElementById('plotBtn').addEventListener('click', draw);
+window.addEventListener('load', draw);
+</script>
+</body>
+</html>
