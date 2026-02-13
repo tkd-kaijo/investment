@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>摩擦つき押し箱シミュレーター</title>
+  <style>
+    :root { --panel-w: 360px; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      background: #fff;
+      color: #111;
+    }
+    .wrap{
+      display: grid;
+      grid-template-columns: var(--panel-w) 1fr;
+      gap: 16px;
+      padding: 16px;
+      box-sizing: border-box;
+      min-height: 100vh;
+    }
+    .panel{
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 14px;
+      box-sizing: border-box;
+    }
+    .panel h1{
+      font-size: 16px;
+      margin: 0 0 10px;
+    }
+    .row{ margin: 10px 0 14px; }
+    label{ display: block; font-size: 13px; margin-bottom: 6px; }
+    input[type="range"]{ width: 100%; }
+    .inline{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      font-size: 13px;
+    }
+    .inline .value{
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .radio{
+      display:flex; gap:10px; flex-wrap: wrap; font-size: 13px;
+    }
+    .radio label{ display:flex; gap:6px; align-items:center; margin:0; }
+    .nums{
+      border-top: 1px dashed #ddd;
+      margin-top: 12px;
+      padding-top: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      font-variant-numeric: tabular-nums;
+    }
+    .btns{ display:flex; gap:10px; flex-wrap: wrap; margin-top: 8px; }
+    button{
+      border: 1px solid #ccc;
+      background:#fff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:active{ transform: translateY(1px); }
+    canvas{
+      width: 100%;
+      height: calc(100vh - 32px);
+      border: 1px solid #eee;
+      border-radius: 12px;
+      background: #fff;
+      display:block;
+    }
+    .hint{
+      font-size: 12px;
+      color:#444;
+      margin-top: 8px;
+    }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 0 6px;
+      font-size: 12px;
+      background: #fafafa;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>摩擦つき押し箱（1次元）</h1>
+
+      <div class="row">
+        <div class="inline">
+          <label style="margin:0;">静止摩擦係数 μ<sub>s</sub>（0〜2.0）</label>
+          <div class="value"><span id="muSVal">0.50</span></div>
+        </div>
+        <input id="muS" type="range" min="0" max="2" step="0.01" value="0.50" />
+        <div class="hint">動摩擦係数 μ<sub>k</sub> = 0.9 μ<sub>s</sub>（自動追従）</div>
+      </div>
+
+      <div class="row">
+        <label>箱の個数（1つ100N）</label>
+        <div class="radio">
+          <label><input type="radio" name="boxes" value="1" checked>1つ</label>
+          <label><input type="radio" name="boxes" value="2">2つ</label>
+          <label><input type="radio" name="boxes" value="3">3つ</label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="inline">
+          <label style="margin:0;">押す力 F（N）</label>
+          <div class="value"><span id="FVal">0</span> N</div>
+        </div>
+        <input id="FRange" type="range" min="0" max="600" step="1" value="0" />
+        <div class="inline" style="margin-top:8px;">
+          <div style="font-size:12px;color:#444;">手入力</div>
+          <input id="FInput" type="number" min="0" max="600" step="1" value="0" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:8px;" />
+        </div>
+        <div class="hint">ショートカット：<span class="kbd">Space</span> で一時停止 / <span class="kbd">R</span> でリセット</div>
+      </div>
+
+      <div class="btns">
+        <button id="resetBtn">リセット</button>
+        <button id="pauseBtn">一時停止</button>
+      </div>
+
+      <div class="nums" id="nums">
+        <!-- 数値表示 -->
+      </div>
+    </div>
+
+    <canvas id="cv"></canvas>
+  </div>
+
+<script>
+(() => {
+  // ===== Canvas setup (HiDPI) =====
+  const canvas = document.getElementById("cv");
+  const ctx = canvas.getContext("2d");
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  // ===== UI elements =====
+  const muSSlider = document.getElementById("muS");
+  const muSVal = document.getElementById("muSVal");
+  const FRange = document.getElementById("FRange");
+  const FInput = document.getElementById("FInput");
+  const FVal = document.getElementById("FVal");
+  const resetBtn = document.getElementById("resetBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+  const numsDiv = document.getElementById("nums");
+
+  let paused = false;
+
+  // ===== Asset (stickman) =====
+  const stickImg = new Image();
+  stickImg.src = "osu.png";
+  let stickReady = false;
+  stickImg.onload = () => { stickReady = true; };
+  stickImg.onerror = () => { stickReady = false; };
+
+  // ===== Simulation constants =====
+  // Box aspect: 縦:横 = 2:3 => height/width = 2/3
+  const boxW = 180;               // px (horizontal)
+  const boxH = boxW * (2/3);      // px (vertical)
+  const groundYFrac = 0.72;       // ground line position
+
+  // Physics: 1D along x
+  // Each box weight = 100N (given). Normal N = 100 * n (N).
+  // Use mass in "N·s^2/m" via m = W/g
+  const g = 9.8;
+
+  // World scaling: convert meters to pixels for displacement
+  const pxPerMeter = 120; // visual scale
+
+  // State
+  const state = {
+    n: 1,
+    muS: 0.50,
+    get muK(){ return 0.9 * this.muS; },
+    F: 0,           // push force (N) along +x
+    x: 0,           // displacement (m)
+    v: 0,           // velocity (m/s)
+    a: 0,           // acceleration (m/s^2)
+    friction: 0,    // friction force on box (N), sign along x (usually -)
+    mode: "static", // "static" | "kinetic"
+  };
+
+  function weightN() { return 100 * state.n; }
+  function massKg()  { return weightN() / g; }
+  function Nforce()  { return weightN(); }
+  function FmaxStatic() { return state.muS * Nforce(); }
+  function FkineticMag(){ return state.muK * Nforce(); }
+
+  // ===== UI sync =====
+  function setForceFrom(value) {
+    const v = Math.max(0, Math.min(600, Number(value) || 0));
+    state.F = v;
+    FRange.value = String(v);
+    FInput.value = String(v);
+    FVal.textContent = String(v);
+  }
+
+  function setMuSFrom(value) {
+    const v = Math.max(0, Math.min(2.0, Number(value) || 0));
+    state.muS = v;
+    muSSlider.value = String(v);
+    muSVal.textContent = v.toFixed(2);
+  }
+
+  muSSlider.addEventListener("input", (e) => setMuSFrom(e.target.value));
+  FRange.addEventListener("input", (e) => setForceFrom(e.target.value));
+  FInput.addEventListener("input", (e) => setForceFrom(e.target.value));
+
+  document.querySelectorAll('input[name="boxes"]').forEach(r => {
+    r.addEventListener("change", () => {
+      const v = Number(document.querySelector('input[name="boxes"]:checked').value);
+      state.n = v;
+      // その場で止めるとわかりやすいので、積み替え時は速度を0に
+      state.v = 0;
+      state.a = 0;
+      state.mode = "static";
+    });
+  });
+
+  resetBtn.addEventListener("click", resetAll);
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "再開" : "一時停止";
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      paused = !paused;
+      pauseBtn.textContent = paused ? "再開" : "一時停止";
+    }
+    if (e.key.toLowerCase() === "r") resetAll();
+  });
+
+  function resetAll() {
+    state.x = 0;
+    state.v = 0;
+    state.a = 0;
+    state.friction = 0;
+    state.mode = "static";
+    setForceFrom(0);
+    paused = false;
+    pauseBtn.textContent = "一時停止";
+  }
+
+  // init
+  setMuSFrom(0.50);
+  setForceFrom(0);
+
+  // ===== Physics step =====
+  function step(dt) {
+    const N = Nforce();
+    const Fpush = state.F;
+    const v = state.v;
+
+    const Fmax = state.muS * N;
+    const Fk = state.muK * N;
+
+    const epsV = 1e-3;
+
+    if (Math.abs(v) < epsV) {
+      // ほぼ静止
+      if (Fpush <= Fmax) {
+        // 静止摩擦が釣り合う
+        state.mode = "static";
+        state.a = 0;
+        state.v = 0;
+        state.friction = -Fpush; // pushに反対
+      } else {
+        // 動き出す
+        state.mode = "kinetic";
+        // 動摩擦は運動方向（ここでは +x へ動き始める）に反対
+        const net = Fpush - Fk;
+        state.a = net / massKg();
+        state.v = state.v + state.a * dt;
+        state.x = state.x + state.v * dt;
+        state.friction = -Fk;
+      }
+    } else {
+      // 既に運動中：動摩擦
+      state.mode = "kinetic";
+      const signV = Math.sign(v);
+      const friction = -signV * Fk;        // 速度に逆向き
+      const net = Fpush + friction;        // friction is signed
+      state.a = net / massKg();
+      const vNew = v + state.a * dt;
+      let xNew = state.x + vNew * dt;
+
+      // 速度がゼロを跨いで止まりそうなとき：静止摩擦で止める判定
+      if (Math.sign(vNew) !== signV) {
+        // この瞬間に「止まれる」なら止める（Fpushが静止限界以下）
+        if (Fpush <= Fmax) {
+          state.v = 0;
+          state.a = 0;
+          state.mode = "static";
+          state.friction = -Fpush;
+        } else {
+          // 止まれないなら反転して動き続ける（通常はここに来にくい）
+          state.v = vNew;
+          state.x = xNew;
+          state.friction = friction;
+        }
+      } else {
+        state.v = vNew;
+        state.x = xNew;
+        state.friction = friction;
+      }
+    }
+
+    // x を下限0にクランプ（左に戻る表現を省く）
+    if (state.x < 0) {
+      state.x = 0;
+      if (state.v < 0) state.v = 0;
+    }
+  }
+
+  // ===== Drawing helpers =====
+  function drawArrow(x1, y1, x2, y2, label) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return;
+
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#111";
+    ctx.fillStyle = "#111";
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // head
+    const headLen = 10;
+    const ux = dx / len, uy = dy / len;
+    const hx = x2 - ux * headLen, hy = y2 - uy * headLen;
+    const px = -uy, py = ux;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(hx + px * 5, hy + py * 5);
+    ctx.lineTo(hx - px * 5, hy - py * 5);
+    ctx.closePath();
+    ctx.fill();
+
+    if (label) {
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(label, x2 + 6, y2 - 6);
+    }
+    ctx.restore();
+  }
+
+  function draw() {
+    const w = canvas.getBoundingClientRect().width;
+    const h = canvas.getBoundingClientRect().height;
+
+    // clear
+    ctx.clearRect(0, 0, w, h);
+
+    // ground
+    const groundY = h * groundYFrac;
+    ctx.save();
+    ctx.strokeStyle = "#bbb";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(w, groundY);
+    ctx.stroke();
+    ctx.restore();
+
+    // Box stack placement
+    const baseX = w * 0.52; // base anchor
+    const stackH = boxH * state.n;
+    const boxLeftX = baseX + state.x * pxPerMeter;
+    const boxBottomY = groundY;
+    const boxTopY = boxBottomY - stackH;
+
+    // Draw boxes (stack)
+    for (let i = 0; i < state.n; i++) {
+      const yTop = boxBottomY - boxH * (i + 1);
+      ctx.save();
+      ctx.fillStyle = "#f4f4f4";
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      ctx.fillRect(boxLeftX, yTop, boxW, boxH);
+      ctx.strokeRect(boxLeftX, yTop, boxW, boxH);
+
+      ctx.fillStyle = "#111";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillText(`${i+1}`, boxLeftX + 8, yTop + 18);
+      ctx.restore();
+    }
+
+    // Stickman placement: right edge touches box left edge
+    const stickH = stackH * 0.75;          // scale by stack height
+    const stickW = stickH * 0.55;          // aspect-ish
+    const stickRight = boxLeftX;           // touch
+    const stickLeft = stickRight - stickW;
+    const stickBottom = groundY;
+    const stickTop = stickBottom - stickH;
+
+    if (stickReady) {
+      // draw image
+      ctx.drawImage(stickImg, stickLeft, stickTop, stickW, stickH);
+    } else {
+      // fallback: simple stick figure box
+      ctx.save();
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      // head
+      const cx = (stickLeft + stickRight) / 2;
+      const headR = Math.min(18, stickW * 0.2);
+      ctx.beginPath();
+      ctx.arc(cx, stickTop + headR + 6, headR, 0, Math.PI*2);
+      ctx.stroke();
+      // body
+      const bodyTopY = stickTop + headR*2 + 10;
+      ctx.beginPath();
+      ctx.moveTo(cx, bodyTopY);
+      ctx.lineTo(cx, stickBottom - 30);
+      ctx.stroke();
+      // legs
+      ctx.beginPath();
+      ctx.moveTo(cx, stickBottom - 30);
+      ctx.lineTo(cx - 18, stickBottom);
+      ctx.moveTo(cx, stickBottom - 30);
+      ctx.lineTo(cx + 18, stickBottom);
+      ctx.stroke();
+      // arms (to the box)
+      ctx.beginPath();
+      ctx.moveTo(cx, bodyTopY + 20);
+      ctx.lineTo(stickRight, bodyTopY + 10);
+      ctx.stroke();
+
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillStyle = "#111";
+      ctx.fillText("osu.png が無いので代替表示", stickLeft - 40, stickTop - 8);
+      ctx.restore();
+    }
+
+    // Force vectors
+    // scale N -> pixels
+    const forceScale = 0.35; // px per N (visual)
+    const handY = stickTop + stickH * 0.45;
+    const handX = stickRight;
+    const boxMidY = boxTopY + stackH * 0.55;
+    const boxLeftMidX = boxLeftX;
+
+    // Push vector from hand into box (+x)
+    const pushLenPx = state.F * forceScale;
+    drawArrow(handX, handY, handX + pushLenPx, handY, `F=${state.F.toFixed(0)}N`);
+
+    // Friction vector on box (opposes push if static; opposes v if kinetic)
+    const fr = state.friction; // signed
+    const frLenPx = Math.abs(fr) * forceScale;
+    const frDir = Math.sign(fr || 0); // -1 means left, +1 means right
+    if (frLenPx > 0.5) {
+      drawArrow(boxLeftMidX + 20, boxMidY, boxLeftMidX + 20 + frDir * frLenPx, boxMidY,
+        `f=${fr.toFixed(0)}N`);
+    }
+
+    // Small caption about state
+    ctx.save();
+    ctx.fillStyle = "#111";
+    ctx.font = "13px system-ui, sans-serif";
+    ctx.fillText(`状態: ${state.mode === "static" ? "静止（静止摩擦）" : "運動（動摩擦）"}`, 14, 24);
+    ctx.restore();
+  }
+
+  function updateNumbers() {
+    const N = Nforce();
+    const Fmax = FmaxStatic();
+    const Fk = FkineticMag();
+    const m = massKg();
+
+    numsDiv.innerHTML = `
+      <div>μs = ${state.muS.toFixed(2)} / μk = ${(state.muK).toFixed(2)}</div>
+      <div>箱: ${state.n} 個（重さ合計 W = ${weightN().toFixed(0)} N）</div>
+      <div>法線力 N = ${N.toFixed(0)} N</div>
+      <div>最大静止摩擦力 fmax = μs N = ${Fmax.toFixed(1)} N</div>
+      <div>動摩擦力 |f| = μk N = ${Fk.toFixed(1)} N</div>
+      <div>質量 m = W/g = ${m.toFixed(2)} kg</div>
+      <div style="margin-top:8px;">x = ${state.x.toFixed(3)} m / v = ${state.v.toFixed(3)} m/s / a = ${state.a.toFixed(3)} m/s²</div>
+    `;
+  }
+
+  // ===== Main loop =====
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.033, (now - last) / 1000); // cap dt
+    last = now;
+
+    if (!paused) step(dt);
+    updateNumbers();
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
