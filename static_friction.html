@@ -517,22 +517,27 @@ if (stickReady) {
   ctx.restore();
 }
 
-    // Force vectors
-const forceScale = 1.4; // 矢印4倍（0.35*4）
+   // ===== Force vectors =====
+const forceScale = 1.4;
 const handY = groundY - stickH * 0.55;
 const handX = stickRight;
 
-// 押す力（青）: これはラベル位置そのまま
+// 押す力（青）
 const pushLenPx = state.F * forceScale;
-drawArrow(handX, handY, handX + pushLenPx, handY, `F=${state.F.toFixed(0)}N`, "#1e5bff");
+drawArrow(
+  handX, handY,
+  handX + pushLenPx, handY,
+  `F=${state.F.toFixed(0)}N`,
+  "#1e5bff"
+);
 
-// 摩擦（赤）: 箱の下端付近 + ラベルを矢印の下へ
-const fr = state.friction; // signed
+// 摩擦（赤）
+const fr = state.friction;
 const frLenPx = Math.abs(fr) * forceScale;
 const frDir = Math.sign(fr || 0);
 
-const frictionY = boxBottomY - 10;         // 箱の下端付近
-const frictionX = boxLeftX + boxW * 0.25;  // 箱の左寄り
+const frictionY = boxBottomY - 10;
+const frictionX = boxLeftX + boxW * 0.25;
 
 if (frLenPx > 0.5) {
   drawArrow(
@@ -540,8 +545,8 @@ if (frLenPx > 0.5) {
     frictionX + frDir * frLenPx, frictionY,
     `f=${fr.toFixed(0)}N`,
     "#e11d48",
-    12,  // labelDx
-    30   // labelDy（矢印の下）
+    12,
+    30
   );
 }
 
