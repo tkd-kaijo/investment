@@ -377,7 +377,7 @@
   }
 
   // ===== Drawing helpers =====
-  function drawArrow(x1, y1, x2, y2, label, color = "#111") {
+  function drawArrow(x1, y1, x2, y2, label, color = "#111", labelDx = 12, labelDy = 0) {
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.hypot(dx, dy);
   if (len < 1e-6) return;
@@ -405,11 +405,12 @@
   ctx.fill();
 
   if (label) {
-  ctx.font = "48px system-ui, sans-serif"; // ← 12px × 4 = 48px
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, x2 + 12, y2);
-}
+    ctx.font = "48px system-ui, sans-serif"; // F=…N もここで維持
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x2 + labelDx, y2 + labelDy);
+  }
+
   ctx.restore();
 }
 
