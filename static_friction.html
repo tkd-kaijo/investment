@@ -405,11 +405,11 @@
   ctx.fill();
 
   if (label) {
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(label, x2 + 6, y2 - 6);
-  }
+  ctx.font = "48px system-ui, sans-serif"; // ← 12px × 4 = 48px
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x2 + 12, y2);
+}
   ctx.restore();
 }
 
