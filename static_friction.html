@@ -164,10 +164,55 @@
   let paused = false;
 
   // ===== Asset (stickman) =====
+  // 画像の透明余白を自動検出した「中身の外接矩形」
+  let stickBBox = null; // {sx, sy, sw, sh}
   const stickImg = new Image();
   stickImg.src = "osu.png";
   let stickReady = false;
-  stickImg.onload = () => { stickReady = true; };
+  stickImg.onload = () => {
+  stickReady = true;
+
+  // 透明でないピクセルの外接矩形を計算
+  try {
+    const oc = document.createElement("canvas");
+    oc.width = stickImg.naturalWidth;
+    oc.height = stickImg.naturalHeight;
+    const octx = oc.getContext("2d");
+    octx.drawImage(stickImg, 0, 0);
+
+    const img = octx.getImageData(0, 0, oc.width, oc.height);
+    const data = img.data;
+
+    let minX = oc.width, minY = oc.height, maxX = -1, maxY = -1;
+    const alphaThreshold = 8; // 0〜255（小さめでOK）
+
+    for (let y = 0; y < oc.height; y++) {
+      for (let x = 0; x < oc.width; x++) {
+        const a = data[(y * oc.width + x) * 4 + 3];
+        if (a > alphaThreshold) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    // 何か検出できた場合のみ採用
+    if (maxX >= 0 && maxY >= 0) {
+      stickBBox = {
+        sx: minX,
+        sy: minY,
+        sw: (maxX - minX + 1),
+        sh: (maxY - minY + 1),
+      };
+    } else {
+      stickBBox = null;
+    }
+  } catch (e) {
+    stickBBox = null; // 失敗したら通常描画にフォールバック
+  }
+};
   stickImg.onerror = () => { stickReady = false; };
 
   // ===== Simulation constants =====
@@ -423,7 +468,23 @@ const stickBottom = groundY;
 const stickTop    = stickBottom - stickH;
 
 if (stickReady) {
-  ctx.drawImage(stickImg, stickLeft, stickTop, stickW, stickH);
+  // bbox が取れていれば「中身だけ」描いて箱にピタッと接触
+  if (stickBBox) {
+    const aspect = stickBBox.sw / stickBBox.sh;
+    const stickW = stickH * aspect;
+
+    const stickRight = boxLeftX;     // 見た目の右端を箱左端に
+    const stickLeft  = stickRight - stickW;
+
+    ctx.drawImage(
+      stickImg,
+      stickBBox.sx, stickBBox.sy, stickBBox.sw, stickBBox.sh, // source crop
+      stickLeft, stickTop, stickW, stickH                      // dest
+    );
+  } else {
+    // bbox が無い場合は従来どおり（縦横比は維持されてる前提）
+    ctx.drawImage(stickImg, stickLeft, stickTop, stickW, stickH);
+  }
 } else {
   // fallback: simple stick figure
   ctx.save();
@@ -457,7 +518,7 @@ if (stickReady) {
 
     // Force vectors
     // scale N -> pixels
-    const forceScale = 0.35; // px per N (visual)
+    const forceScale = 1.4; // px per N (visual)
     const handY = groundY - stickH * 0.55; // 棒人間の体格基準で一定（箱の個数で変わらない）
     const handX = stickRight;
     const boxMidY = boxTopY + stackH * 0.55;
