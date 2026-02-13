@@ -527,7 +527,14 @@ if (stickReady) {
 
     // Push vector from hand into box (+x)
 const pushLenPx = state.F * forceScale;
-drawArrow(handX, handY, handX + pushLenPx, handY, `F=${state.F.toFixed(0)}N`, "#1e5bff"); // 青
+drawArrow(
+  frictionX, frictionY,
+  frictionX + frDir * frLenPx, frictionY,
+  `f=${fr.toFixed(0)}N`,
+  "#e11d48",
+  12,   // labelDx（右に少し）
+  30    // labelDy（下にずらす：好みで20〜40）
+);
 
 // Friction vector on box（箱の下端付近）
 const fr = state.friction; // signed
