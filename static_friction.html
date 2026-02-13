@@ -550,23 +550,6 @@ if (frLenPx > 0.5) {
   );
 }
 
-// Friction vector on box（箱の下端付近）
-const fr = state.friction; // signed
-const frLenPx = Math.abs(fr) * forceScale;
-const frDir = Math.sign(fr || 0); // -1 means left, +1 means right
-
-const frictionY = boxBottomY - 10;         // 箱の下端付近
-const frictionX = boxLeftX + boxW * 0.25;  // 箱の左寄り（見やすい位置）
-
-if (frLenPx > 0.5) {
-  drawArrow(
-    frictionX, frictionY,
-    frictionX + frDir * frLenPx, frictionY,
-    `f=${fr.toFixed(0)}N`,
-    "#e11d48" // 赤
-  );
-}
-
     // Small caption about state
     ctx.save();
     ctx.fillStyle = "#111";
