@@ -174,7 +174,7 @@
   // Box aspect: 縦:横 = 2:3 => height/width = 2/3
   const boxW = 180;               // px (horizontal)
   const boxH = boxW * (2/3);      // px (vertical)
-  const groundYFrac = 0.72;       // ground line position
+  const groundYFrac = 0.62;       // ground line position
 
   // Physics: 1D along x
   // Each box weight = 100N (given). Normal N = 100 * n (N).
@@ -332,41 +332,41 @@
   }
 
   // ===== Drawing helpers =====
-  function drawArrow(x1, y1, x2, y2, label) {
-    const dx = x2 - x1, dy = y2 - y1;
-    const len = Math.hypot(dx, dy);
-    if (len < 1e-6) return;
+  function drawArrow(x1, y1, x2, y2, label, color = "#111") {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return;
 
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#111";
-    ctx.fillStyle = "#111";
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
 
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
 
-    // head
-    const headLen = 10;
-    const ux = dx / len, uy = dy / len;
-    const hx = x2 - ux * headLen, hy = y2 - uy * headLen;
-    const px = -uy, py = ux;
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(hx + px * 5, hy + py * 5);
-    ctx.lineTo(hx - px * 5, hy - py * 5);
-    ctx.closePath();
-    ctx.fill();
+  // head
+  const headLen = 10;
+  const ux = dx / len, uy = dy / len;
+  const hx = x2 - ux * headLen, hy = y2 - uy * headLen;
+  const px = -uy, py = ux;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(hx + px * 5, hy + py * 5);
+  ctx.lineTo(hx - px * 5, hy - py * 5);
+  ctx.closePath();
+  ctx.fill();
 
-    if (label) {
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(label, x2 + 6, y2 - 6);
-    }
-    ctx.restore();
+  if (label) {
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(label, x2 + 6, y2 - 6);
   }
+  ctx.restore();
+}
 
   function draw() {
     const w = canvas.getBoundingClientRect().width;
@@ -410,72 +410,79 @@
     }
 
     // Stickman placement: right edge touches box left edge
-    const stickH = stackH * 0.75;          // scale by stack height
-    const stickW = stickH * 0.55;          // aspect-ish
-    const stickRight = boxLeftX;           // touch
-    const stickLeft = stickRight - stickW;
-    const stickBottom = groundY;
-    const stickTop = stickBottom - stickH;
+// 人は箱の個数に依存せず「固定サイズ」、画像は縦横比を維持
+const stickH = 170; // ← 人の高さ(px)。好みで調整OK（例: 150〜190）
+const aspect = (stickReady && stickImg.naturalHeight)
+  ? (stickImg.naturalWidth / stickImg.naturalHeight)
+  : 0.55; // 画像が無い時の仮比率
+const stickW = stickH * aspect;
 
-    if (stickReady) {
-      // draw image
-      ctx.drawImage(stickImg, stickLeft, stickTop, stickW, stickH);
-    } else {
-      // fallback: simple stick figure box
-      ctx.save();
-      ctx.strokeStyle = "#111";
-      ctx.lineWidth = 2;
-      // head
-      const cx = (stickLeft + stickRight) / 2;
-      const headR = Math.min(18, stickW * 0.2);
-      ctx.beginPath();
-      ctx.arc(cx, stickTop + headR + 6, headR, 0, Math.PI*2);
-      ctx.stroke();
-      // body
-      const bodyTopY = stickTop + headR*2 + 10;
-      ctx.beginPath();
-      ctx.moveTo(cx, bodyTopY);
-      ctx.lineTo(cx, stickBottom - 30);
-      ctx.stroke();
-      // legs
-      ctx.beginPath();
-      ctx.moveTo(cx, stickBottom - 30);
-      ctx.lineTo(cx - 18, stickBottom);
-      ctx.moveTo(cx, stickBottom - 30);
-      ctx.lineTo(cx + 18, stickBottom);
-      ctx.stroke();
-      // arms (to the box)
-      ctx.beginPath();
-      ctx.moveTo(cx, bodyTopY + 20);
-      ctx.lineTo(stickRight, bodyTopY + 10);
-      ctx.stroke();
+const stickRight = boxLeftX; // touch
+const stickLeft  = stickRight - stickW;
+const stickBottom = groundY;
+const stickTop    = stickBottom - stickH;
 
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.fillStyle = "#111";
-      ctx.fillText("osu.png が無いので代替表示", stickLeft - 40, stickTop - 8);
-      ctx.restore();
-    }
+if (stickReady) {
+  ctx.drawImage(stickImg, stickLeft, stickTop, stickW, stickH);
+} else {
+  // fallback: simple stick figure
+  ctx.save();
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 2;
+
+  const cx = (stickLeft + stickRight) / 2;
+  const headR = Math.min(18, stickW * 0.20);
+  ctx.beginPath();
+  ctx.arc(cx, stickTop + headR + 6, headR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const bodyTopY = stickTop + headR * 2 + 10;
+  ctx.beginPath();
+  ctx.moveTo(cx, bodyTopY);
+  ctx.lineTo(cx, stickBottom - 30);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx, stickBottom - 30);
+  ctx.lineTo(cx - 18, stickBottom);
+  ctx.moveTo(cx, stickBottom - 30);
+  ctx.lineTo(cx + 18, stickBottom);
+  ctx.stroke();
+
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.fillStyle = "#111";
+  ctx.fillText("osu.png が無いので代替表示", stickLeft - 40, stickTop - 8);
+  ctx.restore();
+}
 
     // Force vectors
     // scale N -> pixels
     const forceScale = 0.35; // px per N (visual)
-    const handY = stickTop + stickH * 0.45;
+    const handY = groundY - stickH * 0.55; // 棒人間の体格基準で一定（箱の個数で変わらない）
     const handX = stickRight;
     const boxMidY = boxTopY + stackH * 0.55;
     const boxLeftMidX = boxLeftX;
 
     // Push vector from hand into box (+x)
-    const pushLenPx = state.F * forceScale;
-    drawArrow(handX, handY, handX + pushLenPx, handY, `F=${state.F.toFixed(0)}N`);
+const pushLenPx = state.F * forceScale;
+drawArrow(handX, handY, handX + pushLenPx, handY, `F=${state.F.toFixed(0)}N`, "#1e5bff"); // 青
 
-    // Friction vector on box (opposes push if static; opposes v if kinetic)
-    const fr = state.friction; // signed
-    const frLenPx = Math.abs(fr) * forceScale;
-    const frDir = Math.sign(fr || 0); // -1 means left, +1 means right
-    if (frLenPx > 0.5) {
-      drawArrow(boxLeftMidX + 20, boxMidY, boxLeftMidX + 20 + frDir * frLenPx, boxMidY,
-        `f=${fr.toFixed(0)}N`);
-    }
+// Friction vector on box（箱の下端付近）
+const fr = state.friction; // signed
+const frLenPx = Math.abs(fr) * forceScale;
+const frDir = Math.sign(fr || 0); // -1 means left, +1 means right
+
+const frictionY = boxBottomY - 10;         // 箱の下端付近
+const frictionX = boxLeftX + boxW * 0.25;  // 箱の左寄り（見やすい位置）
+
+if (frLenPx > 0.5) {
+  drawArrow(
+    frictionX, frictionY,
+    frictionX + frDir * frLenPx, frictionY,
+    `f=${fr.toFixed(0)}N`,
+    "#e11d48" // 赤
+  );
+}
 
     // Small caption about state
     ctx.save();
