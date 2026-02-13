@@ -518,23 +518,32 @@ if (stickReady) {
 }
 
     // Force vectors
-    // scale N -> pixels
-    const forceScale = 1.4; // px per N (visual)
-    const handY = groundY - stickH * 0.55; // 棒人間の体格基準で一定（箱の個数で変わらない）
-    const handX = stickRight;
-    const boxMidY = boxTopY + stackH * 0.55;
-    const boxLeftMidX = boxLeftX;
+const forceScale = 1.4; // 矢印4倍（0.35*4）
+const handY = groundY - stickH * 0.55;
+const handX = stickRight;
 
-    // Push vector from hand into box (+x)
+// 押す力（青）: これはラベル位置そのまま
 const pushLenPx = state.F * forceScale;
-drawArrow(
-  frictionX, frictionY,
-  frictionX + frDir * frLenPx, frictionY,
-  `f=${fr.toFixed(0)}N`,
-  "#e11d48",
-  12,   // labelDx（右に少し）
-  30    // labelDy（下にずらす：好みで20〜40）
-);
+drawArrow(handX, handY, handX + pushLenPx, handY, `F=${state.F.toFixed(0)}N`, "#1e5bff");
+
+// 摩擦（赤）: 箱の下端付近 + ラベルを矢印の下へ
+const fr = state.friction; // signed
+const frLenPx = Math.abs(fr) * forceScale;
+const frDir = Math.sign(fr || 0);
+
+const frictionY = boxBottomY - 10;         // 箱の下端付近
+const frictionX = boxLeftX + boxW * 0.25;  // 箱の左寄り
+
+if (frLenPx > 0.5) {
+  drawArrow(
+    frictionX, frictionY,
+    frictionX + frDir * frLenPx, frictionY,
+    `f=${fr.toFixed(0)}N`,
+    "#e11d48",
+    12,  // labelDx
+    30   // labelDy（矢印の下）
+  );
+}
 
 // Friction vector on box（箱の下端付近）
 const fr = state.friction; // signed
