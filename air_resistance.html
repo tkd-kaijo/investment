@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>空気抵抗 kv の落下（初速0）デモ</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      background: #fff;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+      color: #111;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px 16px 24px;
+    }
+    header {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0;
+      font-weight: 700;
+    }
+    .note {
+      font-size: 12px;
+      color: #444;
+      margin: 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+      background: #fff;
+    }
+    .panel h2 {
+      font-size: 14px;
+      margin: 0 0 10px;
+    }
+    .row { margin: 10px 0; }
+    label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    input[type="range"] { width: 100%; }
+    .btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    button {
+      border: 1px solid #d8d8d8;
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background: #f7f7f7; }
+    button:active { transform: translateY(1px); }
+    .readouts {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre;
+      border-top: 1px dashed #e5e5e5;
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+
+    /* canvas */
+    .stageWrap {
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+    }
+    canvas { display: block; width: 100%; height: auto; }
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #333;
+      padding: 10px 12px;
+      border-top: 1px solid #eee;
+    }
+    .swatch {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 3px;
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>空気抵抗が <b>kv</b> の落下（初速 0）デモ</h1>
+        <p class="note">モデル：下向きを正、運動方程式 <b>m dv/dt = mg - kv</b>（空気抵抗は速度に反対向き）</p>
+      </div>
+      <p class="note">矢印は物体に追従表示（重力：一定、空気抵抗：kv）</p>
+    </header>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>パラメータ</h2>
+
+        <div class="row">
+          <label>
+            <span>空気抵抗係数 k（N·s/m）</span>
+            <span><b id="kVal"></b></span>
+          </label>
+          <input id="kSlider" type="range" min="0" max="2.0" step="0.01" value="0.35" />
+          <div class="note">目安：小さめ（0.05）〜強め（2.0）。※線形抵抗は低速・小レイノルズ数の近似でよく使います。</div>
+        </div>
+
+        <div class="row">
+          <label>
+            <span>質量 m（kg）</span>
+            <span><b id="mVal"></b></span>
+          </label>
+          <input id="mSlider" type="range" min="0.05" max="2.0" step="0.01" value="0.10" />
+          <div class="note">授業で使いやすいよう m も変えられるようにしています（任意）。</div>
+        </div>
+
+        <div class="row">
+          <label>
+            <span>表示スケール（px / m）</span>
+            <span><b id="scaleVal"></b></span>
+          </label>
+          <input id="scaleSlider" type="range" min="60" max="220" step="1" value="120" />
+        </div>
+
+        <div class="btns">
+          <button id="toggleBtn">⬇ 落下開始</button>
+          <button id="resetBtn">↺ リセット（初速0）</button>
+          <button id="stepBtn">▶ 1ステップ</button>
+        </div>
+
+        <div class="readouts" id="readouts"></div>
+      </div>
+
+      <div class="stageWrap">
+        <canvas id="cv" width="760" height="520"></canvas>
+        <div class="legend">
+          <div><span class="swatch" style="background:#111"></span>物体</div>
+          <div><span class="swatch" style="background:#d62728"></span>重力mg（力）</div>
+          <div><span class="swatch" style="background:#1f77b4"></span>空気抵抗kv（力）</div>
+          <div><span class="swatch" style="background:#d62728"></span>加速度a（左・太）</div>
+          <div><span class="swatch" style="background:#111"></span>速度v（右）</div>
+          <div class="note">（矢印の長さは見やすさのためスケーリングしています。数値は左パネルに表示。）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---- DOM ----
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+
+  const kSlider = document.getElementById('kSlider');
+  const mSlider = document.getElementById('mSlider');
+  const scaleSlider = document.getElementById('scaleSlider');
+
+  const kVal = document.getElementById('kVal');
+  const mVal = document.getElementById('mVal');
+  const scaleVal = document.getElementById('scaleVal');
+
+  const toggleBtn = document.getElementById('toggleBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const stepBtn = document.getElementById('stepBtn');
+
+  const readouts = document.getElementById('readouts');
+
+  // ---- Physics ----
+  const g = 9.8;          // m/s^2
+  const floorMargin = 30; // px
+  const topMargin = 40;   // px
+  const ballR = 10;       // px
+
+  // state (down positive)
+  let t = 0;     // s
+  let y = 0;     // m (0 at start)
+  let v = 0;     // m/s
+
+  // started: whether motion is allowed to progress from the initial state
+  // running: whether the animation is currently advancing in time
+  let started = false;
+  let running = false;
+
+  // rendering & integration
+  let pxPerM = +scaleSlider.value;
+  let lastTs = null;
+
+  // numerical integration (semi-implicit Euler)
+  function step(dt) {
+    const k = +kSlider.value;
+    const m = +mSlider.value;
+
+    // Forces (down positive)
+    const Fg = m * g;          // + (down)
+    const Fd = -k * v;         // opposite velocity: if v>0 (down), drag is up => negative
+    const a = (Fg + Fd) / m;   // m a = Fg + Fd
+
+    // semi-implicit Euler: update v then y
+    v += a * dt;
+    y += v * dt;
+
+    t += dt;
+
+    // floor collision (stop at floor)
+    const floorYpx = cv.height - floorMargin;
+    const ypx = topMargin + y * pxPerM;
+
+    if (ypx + ballR >= floorYpx) {
+      // place exactly on floor
+      y = (floorYpx - topMargin - ballR) / pxPerM;
+      v = 0;
+      running = false;
+      // keep started=true so that 1-step still works if needed
+      toggleBtn.textContent = "⬇ 落下開始";
+    }
+  }
+
+  // ---- Draw helpers ----
+  function drawArrow(x1, y1, x2, y2, color, label, labelFontPx = 30) {
+    const headLen = 10;
+    const dx = x2 - x1, dy = y2 - y1;
+    const ang = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // head
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(ang - Math.PI / 7), y2 - headLen * Math.sin(ang - Math.PI / 7));
+    ctx.lineTo(x2 - headLen * Math.cos(ang + Math.PI / 7), y2 - headLen * Math.sin(ang + Math.PI / 7));
+    ctx.closePath();
+    ctx.fill();
+
+    // label
+    if (label) {
+      ctx.font = `${labelFontPx}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText(label, x2 + 10, y2 + 10);
+    }
+    ctx.restore();
+  }
+
+  function drawArrowWithWidth(x1, y1, x2, y2, color, width, label, labelFontPx = 30) {
+    // head (scale with line width)
+    const head = Math.max(12, width * 3);
+    const dx = x2 - x1, dy = y2 - y1;
+    const ang = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = width;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // head
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 7), y2 - head * Math.sin(ang - Math.PI / 7));
+    ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 7), y2 - head * Math.sin(ang + Math.PI / 7));
+    ctx.closePath();
+    ctx.fill();
+
+    if (label) {
+      ctx.font = `${labelFontPx}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText(label, x2 + 10, y2 + 10);
+    }
+    ctx.restore();
+  }
+
+  function drawTerminalVelocityLabel(x, y, color, withEqualsZero = false, align = 'left') {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = align;
+
+    const baseFont = `30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    const subFont  = `20px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+
+    // Draw as: 終端速度v + subscript f (+ optional =0)
+    const baseText = '終端速度v';
+
+    ctx.font = baseFont;
+    const wBase = ctx.measureText(baseText).width;
+    ctx.font = subFont;
+    const wSub = ctx.measureText('f').width;
+    ctx.font = baseFont;
+    const wEq0 = withEqualsZero ? ctx.measureText('=0').width : 0;
+
+    let xLeft = x;
+    if (align === 'right') {
+      xLeft = x - (wBase + wSub + wEq0 + 6);
+    }
+
+    // base
+    ctx.font = baseFont;
+    ctx.textAlign = 'left';
+    ctx.fillText(baseText, xLeft, y);
+
+    // subscript f
+    ctx.font = subFont;
+    ctx.fillText('f', xLeft + wBase + 2, y + 8);
+
+    // =0
+    if (withEqualsZero) {
+      ctx.font = baseFont;
+      ctx.fillText('=0', xLeft + wBase + wSub + 4, y);
+    }
+
+    ctx.restore();
+  }
+
+  function draw() {
+    pxPerM = +scaleSlider.value;
+
+    // background (white)
+    ctx.clearRect(0, 0, cv.width, cv.height);
+
+    // floor line
+    const floorYpx = cv.height - floorMargin;
+    ctx.save();
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, floorYpx);
+    ctx.lineTo(cv.width, floorYpx);
+    ctx.stroke();
+    ctx.restore();
+
+    // object position in px
+    const xpx = Math.round(cv.width * 0.55);
+    const ypx = topMargin + y * pxPerM;
+
+    // object
+    ctx.save();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(xpx, ypx, ballR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // vectors
+    const k = +kSlider.value;
+    const m = +mSlider.value;
+
+    const Fg = m * g;           // down
+    const FdMag = Math.abs(k * v); // magnitude
+    const FdSign = (v === 0) ? 0 : -Math.sign(v); // drag direction (opposite v). if v>0 => -1 (up)
+    const dragRatio = (Fg > 0) ? (FdMag / Fg) : 0;
+    const isTerminalDisplay = dragRatio > 0.95;
+    // Visualization scaling: make mg correspond to ~90px arrow
+    const maxArrow = 90;
+    const scaleF = (Fg > 0) ? (maxArrow / Fg) : 1;
+
+    const a = g - (k/m) * v; // Canvas: from Canvas: m Canvas: dv/dt = mg - kv
+
+    // gravity arrow (down) - red
+    const gLen = Fg * scaleF;
+    drawArrow(xpx, ypx, xpx, ypx + gLen, '#d62728', '重力mg', 30);
+
+    // drag arrow (opposite v) - blue
+    const dLen = FdMag * scaleF;
+    const dLenDraw = (dLen < 2) ? 2 : dLen;
+    if (v !== 0) {
+      drawArrow(
+        xpx, ypx,
+        xpx, ypx + (FdSign * dLenDraw),
+        '#1f77b4',
+        '空気抵抗kv',
+        30
+      );
+    } else {
+      // placeholder for drag when v=0 (upward small blue line)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(31,119,180,0.25)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(xpx, ypx);
+      ctx.lineTo(xpx, ypx - 14);
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.fillStyle = 'rgba(31,119,180,0.35)';
+      ctx.font = `30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText('空気抵抗kv', xpx + 10, ypx - 14);
+      ctx.restore();
+    }
+
+    // acceleration vector Canvas: (left of ball) - thick red
+    // If drag magnitude exceeds 95% of Canvas: gravity, treat as a≈0 for display: show label only Canvas:
+    const ax = xpx - 80;
+
+    if (isTerminalDisplay) {
+      // show label only, no arrow
+      ctx.save();
+      ctx.fillStyle = '#d62728';
+      ctx.font = `30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('加速度a=0', ax - 12, ypx);
+      ctx.restore();
+    } else {
+      const aMag = Math.abs(a);
+      const aSign = (a === 0) ? 0 : Math.sign(a); // down Canvas: positive
+      const aLen = aMag * (maxArrow / g); // scale so that g corresponds to ~maxArrow
+      const aLenDraw = (aLen < 2) ? 2 : aLen;
+      const ay2 = ypx + (aSign * aLenDraw);
+
+      drawArrowWithWidth(
+        ax, ypx,
+        ax, ay2,
+        '#d62728',
+        7,
+        null,
+        30
+      );
+
+      // label to the left of the acceleration arrow
+      ctx.save();
+      ctx.fillStyle = '#d62728';
+      ctx.font = `30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('加速度a', ax - 12, (ypx + ay2) / 2);
+      ctx.restore();
+    }
+
+    // Canvas: velocity vector (right of ball) - black, same thickness as forces
+    const vx = xpx + 80;
+    if (v === 0) {
+      // show label only, no arrow
+      if (isTerminalDisplay) {
+        drawTerminalVelocityLabel(vx + 10, ypx, '#111', true, 'left');
+      } else {
+        ctx.save();
+        ctx.fillStyle = '#111';
+        ctx.font = `30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('速度v=0', vx + 10, ypx);
+        ctx.restore();
+      }
+    } else {
+      const vMag = Math.abs(v);
+      const vSign = Math.sign(v); // down positive
+      const vLen = vMag * (maxArrow / ((k > 0) ? (m*g/k) : 10));
+      const vLenDraw = (vLen < 2) ? 2 : vLen;
+
+      // draw arrow without label, then draw label (allows subscript rendering)
+      drawArrowWithWidth(
+        vx, ypx,
+        vx, ypx + (vSign * vLenDraw),
+        '#111',
+        3,
+        null,
+        30
+      );
+
+      if (isTerminalDisplay) {
+        drawTerminalVelocityLabel(vx + 10, ypx, '#111', false, 'left');
+      } else {
+        ctx.save();
+        ctx.fillStyle = '#111';
+        ctx.font = `30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('速度v', vx + 10, ypx);
+        ctx.restore();
+      }
+    }
+
+    // side ruler (meters)
+    ctx.save();
+    ctx.strokeStyle = '#eee';
+    ctx.fillStyle = '#666';
+    ctx.lineWidth = 1;
+    ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+    const rulerX = 26;
+    ctx.beginPath();
+    ctx.moveTo(rulerX, topMargin);
+    ctx.lineTo(rulerX, floorYpx);
+    ctx.stroke();
+
+    const meterStep = 1; // m
+    const pxStep = meterStep * pxPerM;
+    for (let yy = topMargin; yy <= floorYpx; yy += pxStep) {
+      ctx.beginPath();
+      ctx.moveTo(rulerX - 6, yy);
+      ctx.lineTo(rulerX + 6, yy);
+      ctx.stroke();
+      const meters = ((yy - topMargin) / pxPerM).toFixed(0);
+      ctx.fillText(meters + " m", rulerX + 10, yy + 4);
+    }
+    ctx.restore();
+
+    // readouts
+    const vt = (k > 0) ? (m * g / k) : Infinity;
+    const Fd = k * v; // magnitude with sign same as v for k*v; drag force is -k v
+    readouts.textContent =
+`t = ${t.toFixed(2)} s
+y = ${y.toFixed(2)} m  (下向き+)
+v = ${v.toFixed(2)} m/s
+g = ${g.toFixed(2)} m/s^2
+m = ${m.toFixed(2)} kg
+k = ${k.toFixed(2)} N·s/m
+
+重力   |Fg| = mg = ${(m*g).toFixed(2)} N（下向き）
+抵抗   Fd = -k v = ${(-Fd).toFixed(2)} N（速度に反対）
+終端速度 vt = mg/k = ${Number.isFinite(vt) ? vt.toFixed(2) : "∞"} m/s`;
+  }
+
+  // ---- UI ----
+  function syncLabels() {
+    kVal.textContent = (+kSlider.value).toFixed(2);
+    mVal.textContent = (+mSlider.value).toFixed(2);
+    scaleVal.textContent = `${(+scaleSlider.value)} px/m`;
+  }
+
+  function reset() {
+    t = 0; y = 0; v = 0;
+    started = false;
+    running = false;
+    toggleBtn.textContent = "⬇ 落下開始";
+    lastTs = null;
+    syncLabels();
+    draw();
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    if (!started) started = true;
+    running = !running;
+    toggleBtn.textContent = running ? "⏸ 停止" : "⬇ 落下開始";
+    lastTs = null;
+  });
+
+  resetBtn.addEventListener('click', reset);
+
+  stepBtn.addEventListener('click', () => {
+    // single small step (good for説明)
+    if (!started) started = true;
+    // do not auto-run; only advance one step
+    step(1/120);
+    draw();
+  });
+
+  [kSlider, mSlider, scaleSlider].forEach(el => {
+    el.addEventListener('input', () => {
+      syncLabels();
+      // k を途中で変えてもそのまま継続（数値積分なのでOK）
+      draw();
+    });
+  });
+
+  // ---- Animation loop ----
+  function loop(ts) {
+    if (lastTs == null) lastTs = ts;
+    const dtReal = (ts - lastTs) / 1000;
+    lastTs = ts;
+
+    // clamp dt (tab switching etc.)
+    const dt = Math.min(0.03, Math.max(0.0, dtReal));
+
+    if (started && running) {
+      // substep for stability
+      const sub = 4;
+      const h = dt / sub;
+      for (let i = 0; i < sub; i++) step(h);
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // init
+  syncLabels();
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
