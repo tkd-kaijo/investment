@@ -154,13 +154,13 @@
             <span>表示スケール（px / m）</span>
             <span><b id="scaleVal"></b></span>
           </label>
-          <input id="scaleSlider" type="range" min="60" max="220" step="1" value="120" />
+          <input id="scaleSlider" type="range" min="60" max="220" step="1" value="90" />
         </div>
 
         <div class="btns">
           <button id="toggleBtn">⬇ 落下開始</button>
           <button id="resetBtn">↺ リセット（初速0）</button>
-          <button id="stepBtn">▶ 1ステップ</button>
+          <button id="stepBtn">▶ 10ステップ</button>
         </div>
 
         <div class="readouts" id="readouts"></div>
@@ -215,6 +215,7 @@
   // running: whether the animation is currently advancing in time
   let started = false;
   let running = false;
+  let ended = false; // true after reaching the floor
 
   // rendering & integration
   let pxPerM = +scaleSlider.value;
@@ -245,6 +246,7 @@
       y = (floorYpx - topMargin - ballR) / pxPerM;
       v = 0;
       running = false;
+      ended = true;
       // keep started=true so that 1-step still works if needed
       toggleBtn.textContent = "⬇ 落下開始";
     }
@@ -392,7 +394,7 @@
     const FdMag = Math.abs(k * v); // magnitude
     const FdSign = (v === 0) ? 0 : -Math.sign(v); // drag direction (opposite v). if v>0 => -1 (up)
     const dragRatio = (Fg > 0) ? (FdMag / Fg) : 0;
-    const isTerminalDisplay = dragRatio > 0.95;
+    const isTerminalDisplay = dragRatio > 0.90;
     // Visualization scaling: make mg correspond to ~90px arrow
     const maxArrow = 90;
     const scaleF = (Fg > 0) ? (maxArrow / Fg) : 1;
@@ -432,7 +434,7 @@
     }
 
     // acceleration vector Canvas: (left of ball) - thick red
-    // If drag magnitude exceeds 95% of Canvas: gravity, treat as a≈0 for display: show label only Canvas:
+    // If drag magnitude exceeds 90% of gravity, treat as a≈0 for display: show label only.
     const ax = xpx - 80;
 
     if (isTerminalDisplay) {
@@ -566,6 +568,7 @@ k = ${k.toFixed(2)} N·s/m
     t = 0; y = 0; v = 0;
     started = false;
     running = false;
+    ended = false;
     toggleBtn.textContent = "⬇ 落下開始";
     lastTs = null;
     syncLabels();
@@ -573,6 +576,18 @@ k = ${k.toFixed(2)} N·s/m
   }
 
   toggleBtn.addEventListener('click', () => {
+    // If the previous fall ended, starting again should reset and immediately fall.
+    if (ended && !running) {
+      t = 0; y = 0; v = 0;
+      started = true;
+      running = true;
+      ended = false;
+      toggleBtn.textContent = "⏸ 停止";
+      lastTs = null;
+      draw();
+      return;
+    }
+
     if (!started) started = true;
     running = !running;
     toggleBtn.textContent = running ? "⏸ 停止" : "⬇ 落下開始";
@@ -582,10 +597,11 @@ k = ${k.toFixed(2)} N·s/m
   resetBtn.addEventListener('click', reset);
 
   stepBtn.addEventListener('click', () => {
-    // single small step (good for説明)
+    // advance exactly 10 small steps
     if (!started) started = true;
-    // do not auto-run; only advance one step
-    step(1/120);
+    // do not auto-run; only advance 10 steps
+    const h = 1/120;
+    for (let i = 0; i < 10; i++) step(h);
     draw();
   });
 
